@@ -11,7 +11,7 @@ type Pickup = { id:string; status:string; scheduled_pickup_date:string|null }
 type Visit = { id:string; planned_for:string; completed_at:string|null }
 
 const adminEmail = 'tomt@ltcrentals.net'
-const logo = '/ltc-rentals-logo.png'
+const logo = '/ltc-logo.svg'
 
 export default function HomePage() {
   const [user,setUser] = useState<User|null>(null)
