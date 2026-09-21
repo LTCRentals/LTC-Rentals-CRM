@@ -4,12 +4,13 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
-type Tab = 'home' | 'customers' | 'inventory' | 'orders' | 'new-order'
+type Tab = 'home' | 'map' | 'customers' | 'inventory' | 'orders' | 'new-order'
 type Equipment = { id:string; name:string; category:string|null; available_qty:number; daily_rate:number|null; weekly_rate:number|null; four_week_rate:number|null }
 type Order = { id:string; order_number:number; job_name:string|null; ordered_by_name:string|null; delivery_address:string|null; delivery_date:string|null; status:string; quantity:number; equipment_types?:{name:string}|null }
 type Pickup = { id:string; status:string; scheduled_pickup_date:string|null }
 type Visit = { id:string; planned_for:string; completed_at:string|null }
 type Customer = { id:string; name:string; phone:string|null; email:string|null; billing_address:string|null; notes:string|null; last_visit_at:string|null; created_at:string }
+type Job = { id:string; permit_number:string; job_description:string; job_address:string|null; city:string|null; state:string|null; postal_code:string|null; latitude:number|null; longitude:number|null; job_value:number|null; status:string }
 type Engagement = { id:string; customer_id:string; user_id:string|null; engagement_type:string; notes:string; occurred_at:string; follow_up_at:string|null; created_at:string }
 
 const adminEmail = 'tomt@ltcrentals.net'
@@ -28,6 +29,7 @@ export default function HomePage() {
   const [visits,setVisits] = useState<Visit[]>([])
   const [customers,setCustomers] = useState<Customer[]>([])
   const [engagements,setEngagements] = useState<Engagement[]>([])
+  const [jobs,setJobs] = useState<Job[]>([])
   const [selectedCustomerId,setSelectedCustomerId] = useState<string|null>(null)
   const [showAddCustomer,setShowAddCustomer] = useState(false)
   const [customerSearch,setCustomerSearch] = useState('')
@@ -50,15 +52,16 @@ export default function HomePage() {
   }
 
   async function loadData(){
-    const [eq,ord,pick,visit,cust,eng]=await Promise.all([
+    const [eq,ord,pick,visit,cust,eng,job]=await Promise.all([
       supabase.from('equipment_types').select('id,name,category,available_qty,daily_rate,weekly_rate,four_week_rate').eq('active',true).order('category').order('name'),
       supabase.from('orders').select('id,order_number,job_name,ordered_by_name,delivery_address,delivery_date,status,quantity,equipment_types(name)').order('created_at',{ascending:false}).limit(50),
       supabase.from('pickups').select('id,status,scheduled_pickup_date').in('status',['called_off','scheduled']),
       supabase.from('visits').select('id,planned_for,completed_at').is('completed_at',null),
       supabase.from('customers').select('id,name,phone,email,billing_address,notes,last_visit_at,created_at').order('name'),
-      supabase.from('customer_engagements').select('id,customer_id,user_id,engagement_type,notes,occurred_at,follow_up_at,created_at').order('occurred_at',{ascending:false}).limit(500)
+      supabase.from('customer_engagements').select('id,customer_id,user_id,engagement_type,notes,occurred_at,follow_up_at,created_at').order('occurred_at',{ascending:false}).limit(500),
+      supabase.from('jobs').select('id,permit_number,job_description,job_address,city,state,postal_code,latitude,longitude,job_value,status').eq('status','active').order('job_value',{ascending:false})
     ])
-    setEquipment((eq.data ?? []) as Equipment[]); setOrders((ord.data ?? []) as unknown as Order[]); setPickups((pick.data ?? []) as Pickup[]); setVisits((visit.data ?? []) as Visit[]); setCustomers((cust.data ?? []) as Customer[]); setEngagements((eng.data ?? []) as Engagement[])
+    setEquipment((eq.data ?? []) as Equipment[]); setOrders((ord.data ?? []) as unknown as Order[]); setPickups((pick.data ?? []) as Pickup[]); setVisits((visit.data ?? []) as Visit[]); setCustomers((cust.data ?? []) as Customer[]); setEngagements((eng.data ?? []) as Engagement[]); setJobs((job.data ?? []) as Job[])
   }
 
   async function sendMagicLink(e:FormEvent){ e.preventDefault(); setMessage('Sending sign-in link...'); const {error}=await supabase.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.origin}}); setMessage(error ? error.message : 'Check your email for the LTC Rentals sign-in link.') }
@@ -102,14 +105,15 @@ export default function HomePage() {
   if(!authorized) return <div className="login-wrap"><div className="login-card"><Logo className="login-logo"/><h1>Access pending</h1><p>Your login worked, but this account has not been activated for the CRM.</p><button className="btn btn-dark" style={{width:'100%'}} onClick={signOut}>Sign out</button></div></div>
 
   function goCustomers(){setSelectedCustomerId(null);setTab('customers')}
-  const title=tab==='home'?'Customer Relationships':tab==='customers'?(selectedCustomer?.name||'Customers'):tab==='inventory'?'Inventory':tab==='orders'?'Orders':'New Rental Order'
+  const title=tab==='home'?'Customer Relationships':tab==='map'?'Territory Map':tab==='customers'?(selectedCustomer?.name||'Customers'):tab==='inventory'?'Inventory':tab==='orders'?'Orders':'New Rental Order'
 
   return <div className="app-shell">
     <header className="topbar"><div className="brand"><Logo className="brand-logo"/></div><div className="top-actions"><button className="btn btn-primary" onClick={()=>{setShowAddCustomer(true);setTab('customers')}}>+ Customer</button><button className="btn btn-light desktop" onClick={()=>setTab('new-order')}>+ Order</button><button className="btn btn-dark desktop" onClick={signOut}>Sign Out</button></div></header>
     <main className="container">
       <div className="hero"><div><h2>{title}</h2><p>{tab==='home'?'Track relationships, conversations and follow-ups':new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</p></div></div>
-      <nav className="nav"><button className={tab==='home'?'active':''} onClick={()=>setTab('home')}>CRM Home</button><button className={tab==='customers'?'active':''} onClick={goCustomers}>Customers</button><button className={tab==='orders'?'active':''} onClick={()=>setTab('orders')}>Orders</button><button className={tab==='inventory'?'active':''} onClick={()=>setTab('inventory')}>Inventory</button></nav>
+      <nav className="nav"><button className={tab==='home'?'active':''} onClick={()=>setTab('home')}>CRM Home</button><button className={tab==='map'?'active':''} onClick={()=>setTab('map')}>Map</button><button className={tab==='customers'?'active':''} onClick={goCustomers}>Customers</button><button className={tab==='orders'?'active':''} onClick={()=>setTab('orders')}>Orders</button><button className={tab==='inventory'?'active':''} onClick={()=>setTab('inventory')}>Inventory</button></nav>
       {tab==='home' && <CrmDashboard customers={customers.length} followUps={followUps} stale={staleCustomers} visits={visits.length} deliveries={scheduledDeliveries} engagements={engagements.slice(0,8)} customerMap={new Map(customers.map(c=>[c.id,c]))} goCustomers={goCustomers} addCustomer={()=>{setShowAddCustomer(true);setTab('customers')}}/>}
+      {tab==='map' && <MapScreen jobs={jobs} customers={customers}/>} 
       {tab==='customers' && !selectedCustomer && <CustomersScreen customers={filteredCustomers} search={customerSearch} setSearch={setCustomerSearch} open={id=>setSelectedCustomerId(id)} add={()=>setShowAddCustomer(true)}/>} 
       {tab==='customers' && selectedCustomer && <CustomerDetail customer={selectedCustomer} engagements={engagements.filter(x=>x.customer_id===selectedCustomer.id)} back={()=>setSelectedCustomerId(null)} addEngagement={addEngagement} saving={saving} newOrder={()=>setTab('new-order')}/>} 
       {tab==='inventory' && <Inventory equipment={equipment} onQty={updateQty}/>} 
@@ -117,8 +121,17 @@ export default function HomePage() {
       {tab==='new-order' && <NewOrder equipment={equipment} user={user} onSaved={async()=>{await loadData();setTab('orders')}} saving={saving} setSaving={setSaving}/>} 
     </main>
     {showAddCustomer && <AddCustomerModal close={()=>setShowAddCustomer(false)} submit={addCustomer} saving={saving}/>} 
-    <div className="bottom-nav"><button onClick={()=>setTab('home')}>CRM</button><button onClick={goCustomers}>Customers</button><button onClick={()=>setTab('orders')}>Orders</button><button onClick={()=>setTab('inventory')}>Inventory</button></div>
+    <div className="bottom-nav"><button onClick={()=>setTab('home')}>CRM</button><button onClick={()=>setTab('map')}>Map</button><button onClick={goCustomers}>Customers</button><button onClick={()=>setTab('orders')}>Orders</button><button onClick={()=>setTab('inventory')}>Inventory</button></div>
   </div>
+}
+
+function MapScreen({jobs,customers}:{jobs:Job[];customers:Customer[]}){
+  const [selected,setSelected]=useState<{kind:'job'|'customer';item:any}|null>(null)
+  const locatedJobs=jobs.filter(j=>j.latitude!=null&&j.longitude!=null)
+  const unlocated=jobs.length-locatedJobs.length
+  const officeCustomers=customers.filter(c=>c.billing_address)
+  const mapUrl=locatedJobs.length?('https://www.openstreetmap.org/export/embed.html?bbox=-83.2%2C25.0%2C-79.7%2C28.7&layer=mapnik&marker='+locatedJobs[0].latitude+'%2C'+locatedJobs[0].longitude):'https://www.openstreetmap.org/export/embed.html?bbox=-83.2%2C25.0%2C-79.7%2C28.7&layer=mapnik'
+  return <><div className="map-legend"><span><i className="dot job-dot"/>Job sites</span><span><i className="dot prospect-dot"/>Prospects</span><span><i className="dot customer-dot"/>Existing customers</span></div><div className="map-layout"><div className="map-card"><iframe title="LTC territory map" src={mapUrl} className="territory-map"/><div className="map-note">Interactive territory map · {locatedJobs.length} geocoded job sites · {officeCustomers.length} customer/prospect office addresses{unlocated?\` · ${unlocated} job sites awaiting coordinates\`:''}</div></div><div className="map-sidebar"><h3>Job Sites</h3>{jobs.map(j=><button key={j.id} className="map-list-item" onClick={()=>setSelected({kind:'job',item:j})}><span className="pin-icon job-pin">●</span><div><strong>{j.job_description}</strong><small>{[j.job_address,j.city,j.state].filter(Boolean).join(', ')}</small>{j.job_value!=null&&<small>{money(j.job_value)}</small>}</div></button>)}<h3>Prospect Offices</h3>{officeCustomers.length?officeCustomers.map(c=><button key={c.id} className="map-list-item" onClick={()=>setSelected({kind:'customer',item:c})}><span className="pin-icon prospect-pin">●</span><div><strong>{c.name}</strong><small>{c.billing_address}</small></div></button>):<div className="map-empty">Prospect office addresses still need to be added before their pins can be placed accurately.</div>}</div></div>{selected&&<div className="map-detail card"><button className="close-btn map-close" onClick={()=>setSelected(null)}>×</button><h3>{selected.kind==='job'?selected.item.job_description:selected.item.name}</h3><p>{selected.kind==='job'?[selected.item.job_address,selected.item.city,selected.item.state].filter(Boolean).join(', '):selected.item.billing_address}</p>{selected.kind==='job'&&<><div><strong>Permit:</strong> {selected.item.permit_number}</div>{selected.item.job_value!=null&&<div><strong>Project value:</strong> {money(selected.item.job_value)}</div>}</>}</div>}</>
 }
 
 function CrmDashboard({customers,followUps,stale,visits,deliveries,engagements,customerMap,goCustomers,addCustomer}:{customers:number;followUps:number;stale:number;visits:number;deliveries:number;engagements:Engagement[];customerMap:Map<string,Customer>;goCustomers:()=>void;addCustomer:()=>void}){
